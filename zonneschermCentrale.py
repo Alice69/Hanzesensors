@@ -1,34 +1,53 @@
-from tkinter import *
-import time, random
+import serial, time
 
-# Center function
-def getCenterGeometry(width, height):
-    return (width, height, int(tk.winfo_screenwidth() / 2) - int(width / 2), int(tk.winfo_screenheight() / 2) - int(height / 2))
+class Protocol:
+    def __init__(self):
+        self.ser = None
 
-class GridFrame(Frame):
-    def __init__(self, master, width, height):
-        Frame.__init__(self, master)
-        self.master.title("zonneschermCentrale")
-        self.master.geometry('%dx%d+%d+%d' % getCenterGeometry(width, height))  # w,h,x,y
-        self.master.columnconfigure(0, weight=1)
-        self.master.columnconfigure(1, weight=2)
-        self.master.rowconfigure(0, weight=1)
+    def request(self, command):
+        try:
+            self.ser.write((command + "\n").encode('ascii'))
+        except serial.SerialException:
+            return None
 
-        self.subFrame = Frame(self.master, bg='#FAA')
-        self.subFrame.grid(column=0, row=0, sticky=NSEW)
-        self.subFrame.columnconfigure(0, weight=1)
-        for i in range(6):
-            self.subFrame.rowconfigure(i, weight=1)
-        self.label = Label(self.subFrame, text="Zonneschermen:", bg='#FAA')
-        self.label.grid(column=0, row=0, sticky=NSEW)
+        test = self.ser.readline().decode('ascii').strip()
+        info = None
+        if test not in ["OK", "ERR"]:
+            info = test
+            test = self.ser.readline().decode('ascii').strip()
+            if test not in ["OK", "ERR"]:
+                test = None
 
-        self.subFrame2 = Frame(self.master, bg='#AAF')
-        self.subFrame2.grid(column=1, row=0, sticky=NSEW)
+        return (test, info)
+
+    def handshake(self, comport):
+        try:
+            self.ser = serial.Serial(comport, 19200, timeout=4)
+            time.sleep(2)
+        except serial.SerialException:
+            print("No device in " + comport)
+            return False
+
+        tries_left = 3
+        while tries_left > 0:
+            r = self.request("handshake")
+            if r == ("OK", "pizza"):
+                return True
+            else:
+                tries_left -= 1
+                if (tries_left == 0):
+                    return False
 
 
 
-tk = Tk()
+comport = input("COM Poort:")
+protocol = Protocol()
+if (protocol.handshake(comport)):
+    print(comport + " connected! =D")
 
-mainFrame = GridFrame(tk, 640, 480)
-
-tk.mainloop()
+    while (1):
+        if protocol.request("ping") != ("OK", "pong"):
+            print(comport + " disconnected! :c")
+        time.sleep(1)
+else:
+    print("Handshake failed!")
