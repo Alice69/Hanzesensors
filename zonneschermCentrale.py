@@ -1,89 +1,136 @@
 from tkinter import *
-from tkinter import ttk
+from tkinter import ttk, font
 
-import time, random
 
-# Center function
-def getCenterGeometry(width, height):
-    return (width, height, int(tk.winfo_screenwidth() / 2) - int(width / 2), int(tk.winfo_screenheight() / 2) - int(height / 2))
-
-class GridFrame(Frame):
+class MainFrame(Frame):
     def __init__(self, master, width, height):
         Frame.__init__(self, master)
         self.master.title("zonneschermCentrale")
-        self.master.geometry('%dx%d+%d+%d' % getCenterGeometry(width, height))  # w,h,x,y
+        self.master.geometry('%dx%d+%d+%d' % self.getCenterGeometry(width, height))  # w,h,x,y
         self.master.columnconfigure(0, weight=1)
-        self.master.columnconfigure(1, weight=2)
+        self.master.columnconfigure(1, weight=3)
         self.master.rowconfigure(0, weight=1)
 
+        self.sideMenu = SideMenu(master)
+        self.dataMenu = DataMenu(master, self)
 
-        #maken van het canvas, gekozen voor canvas anders kun je niet scrollen
+        self.frames = {}
+        for F in (ZonneschermFrame, MetingenFrame, InstellingenFrame):
+            self.frames[F] = F(self.dataMenu)
 
-        self.canvas = Canvas(self.master, bg='#c9cacc')
-        self.canvas.grid(column=0, row=0, sticky=NSEW)
-        self.canvas.columnconfigure(0, weight=1)
+        self.show_frame(ZonneschermFrame)
+
+    def getCenterGeometry(self, w, h):
+        return (w, h, int(tk.winfo_screenwidth() / 2) - int(w / 2), int(tk.winfo_screenheight() / 2) - int(h / 2))
+
+    def show_frame(self, frame):
+        self.frames[frame].tkraise()
+
+
+class SideMenu(Canvas):
+    def __init__(self, master):
+        Canvas.__init__(self, master)
+        self.config(bg='#dddddd')
+        self.grid(column=0, row=0, sticky=NSEW)
+        self.columnconfigure(0, weight=3)
+        self.columnconfigure(1, weight=1)
+        self.rowconfigure(0, weight=1)
+        self.rowconfigure(1, weight=20)
+        self.rowconfigure(2, weight=1)
+
+        self.label = Label(self, text="Zonneschermen:", fg='#666666', bg='#dddddd', font=("Helvetica", 12, "bold italic"))
+        self.label.grid(columnspan=3, row=0, sticky=NSEW)
 
         #scrollbar
+        self.scrollbar = ttk.Scrollbar(self, orient=VERTICAL)
+        self.scrollbar.grid(row=1, column=2, sticky=NS)
+        #self.config(yscrollcommand = self.scrollbar.set)
 
-        self.scrollbar = ttk.Scrollbar(self.canvas, orient=VERTICAL, command = self.canvas.yview)
-        self.scrollbar.grid(rowspan=6, column=1, sticky=NS)
-        self.canvas.config(yscrollcommand = self.scrollbar.set)
+        self.mylist = Listbox(self, width=0, bd=1, bg='#dddddd', relief='flat', yscrollcommand=self.scrollbar.set)
+        self.mylist.grid(columnspan=2, row=1, sticky=NSEW)
+        for line in range(40):
+            self.mylist.insert(END, "Naamloos COM" + str(line))
+        self.scrollbar.config(command=self.mylist.yview)
+
+        self.comport = StringVar()
+        self.inputField = Entry(self, width=0, textvariable=self.comport)
+        self.inputField.grid(column=0, row=2, sticky=NSEW)
+        self.button = Button(self, text="Connect", command=lambda: print(self.comport.get()))
+        self.button.grid(columnspan=2, column=1, row=2, sticky=NSEW)
 
 
-        #canvas wordt in 6 rijen verdeeld
+class DataMenu(Frame):
+    def __init__(self, master, controller):
+        Frame.__init__(self, master)
+        self.config(bg='#FFF')
+        self.grid(column=1, row=0, sticky=NSEW)
+        self.columnconfigure(0, weight=1)
+        self.columnconfigure(1, weight=1)
+        self.columnconfigure(2, weight=1)
+        self.rowconfigure(0, weight=1)
+        self.rowconfigure(1, weight=20)
+        self.rowconfigure(2, weight=1)
 
-        for i in range(6):
-            self.canvas.rowconfigure(i, weight=1)
-        self.label = Label(self.canvas, text="Zonneschermen:", bg='#c9cacc')
-        self.label.grid(column=0, row=0, sticky=NSEW)
-
-        #frame naast canvas, opgedeeld in drie kolommen en 3 rijen waarvan
-        #de ene rij 20/22 deel inneemt.
-
-        self.subFrame = Frame(self.master, bg='#FFF')
-        self.subFrame.grid(column=1, row=0, sticky=NSEW)
-        self.subFrame.columnconfigure(0, weight=1)
-        self.subFrame.columnconfigure(1, weight=1)
-        self.subFrame.columnconfigure(2, weight=1)
-        self.subFrame.rowconfigure(0, weight=1)
-        self.subFrame.rowconfigure(1, weight=20)
-        self.subFrame.rowconfigure(2, weight=1)
-
-        #buttons op frame
-
-        self.button = Button(self.subFrame,text = "Zonnescherm")
+        # buttons op frame
+        self.button = Button(self, text="Zonnescherm", command=lambda: controller.show_frame(ZonneschermFrame))
         self.button.grid(column=0, row=0, sticky=NSEW)
-        self.button = Button(self.subFrame, text="Metingen")
-        self.button.grid(column=1, row=0, sticky=NSEW)
-        self.button = Button(self.subFrame, text="Instellingen")
-        self.button.grid(column=2, row=0, sticky=NSEW)
+        self.button1 = Button(self, text="Metingen", command=lambda: controller.show_frame(MetingenFrame))
+        self.button1.grid(column=1, row=0, sticky=NSEW)
+        self.button2 = Button(self, text="Instellingen", command=lambda: controller.show_frame(InstellingenFrame))
+        self.button2.grid(column=2, row=0, sticky=NSEW)
 
-        #canvas op frame
+        self.progressBar = Label(self, bg='#5bff6c')
+        self.progressBar.grid(columnspan=3, row=2, sticky=NSEW)
 
-        self.cframe = Canvas(self.subFrame, bg='#FFF')
-        self.cframe.grid(columnspan=3, row=1, sticky=NSEW)
-        self.cframe.columnconfigure(0,weight=1)
-        self.cframe.columnconfigure(1, weight=1)
-        self.cframe.columnconfigure(2, weight=1)
-        self.cframe.columnconfigure(3, weight=1)
-        self.cframe.columnconfigure(4, weight=1)
-        self.cframe.rowconfigure(0, weight=1)
-        self.cframe.rowconfigure(1, weight=2)
-        self.cframe.rowconfigure(2, weight=1)
-        self.cframe.rowconfigure(3, weight=2)
-        self.cframe.rowconfigure(4, weight=1)
 
-        #buttons op cframe = canvas
+class DataFrame(Frame):
+    def __init__(self, master):
+        Frame.__init__(self, master)
+        self.config(bg='#FFF')
+        self.grid(columnspan=3, row=1, sticky=NSEW)
 
-        self.cbutton = Button(self.cframe, text = "Oprollen", bg = '#32e82c')
-        self.cbutton.grid(column=1, row=2, sticky = NSEW)
-        self.cbutton = Button(self.cframe, text="Uitrollen", bg = '#ff1500')
-        self.cbutton.grid(column=3, row=2, sticky=NSEW)
+class ZonneschermFrame(DataFrame):
+    def __init__(self, master):
+        DataFrame.__init__(self, master)
 
+        for col in range(5):
+            self.columnconfigure(col, weight=1)
+        self.rowconfigure(0, weight=1)
+        self.rowconfigure(1, weight=2)
+        self.rowconfigure(2, weight=1)
+        self.rowconfigure(3, weight=2)
+        self.rowconfigure(4, weight=1)
+
+        self.button = Button(self, text = "Oprollen", bg = '#5bff6c', border=1, relief='flat', font=("Helvetica", 10, "bold"))
+        self.button.grid(column=1, row=2, sticky = NSEW)
+        self.button1 = Button(self, text = "Uitrollen", bg = '#ff6b5b', border=1, relief='flat', font=("Helvetica", 10, "bold"))
+        self.button1.grid(column=3, row=2, sticky=NSEW)
+
+class MetingenFrame(DataFrame):
+    def __init__(self, master):
+        DataFrame.__init__(self, master)
+
+        self.columnconfigure(0, weight=1)
+        self.columnconfigure(1, weight=1)
+        self.rowconfigure(0, weight=1)
+        self.rowconfigure(1, weight=1)
+
+        self.label = Label(self, text="Grafiek1")
+        self.label.grid(column=0, row=0, sticky=NSEW)
+        self.label1 = Label(self, text="Grafiek2")
+        self.label1.grid(column=1, row=0, sticky=NSEW)
+        self.tabel = Label(self, text="Tabel")
+        self.tabel.grid(column=0, row=1, sticky=NSEW)
+
+class InstellingenFrame(DataFrame):
+    def __init__(self, master):
+        DataFrame.__init__(self, master)
+
+        self.label = Label(self, text="InstellingenFrame :)")
+        self.label.grid()
 
 
 
 tk = Tk()
-mainFrame = GridFrame(tk, 640, 480)
-
+mainFrame = MainFrame(tk, 1024, 600)
 tk.mainloop()
