@@ -7,6 +7,9 @@
 // datasheet p.190; F_OSC = 16 MHz & baud rate = 19.200
 #define UBBRVAL 51
 
+#include <avr/interrupt.h>
+#include <stdint.h>
+
 
 #define HIGH 0x1
 #define LOW  0x0
@@ -15,54 +18,10 @@
 #define ECHOPIN 1	// Pin 9 B1
 #define LICHTPIN 2
 
+/* Timer/Counter Interrupt MaSK register */
+#define TIMSK     _SFR_IO8(0x37)
 
-
-// UltrasoneSensor
-void timer_init()
-{
-	//Zet de pre-scaler op 1024
-	TCCR1B = (1<<CS12)|(1<<CS10);
-}
-void write(uint8_t pin, uint8_t val)
-{
-	if (val == LOW) {
-		PORTB &= ~(_BV(pin)); // clear bit
-	} else {
-		PORTB |= _BV(pin); // set bit
-	}
-}
-
-uint32_t pulseDuration(void){	
-	// Clear trigger
-	write(TRIGPIN, LOW);
-	_delay_us(2);
-	
-	// Set trigger for 10 microseconds
-	write(TRIGPIN, HIGH);
-	TCNT1 = 0;
-	_delay_us(10);
-	write(TRIGPIN, LOW);
-	
-	while(1)
-	{
-		// Check voor echo
-		if( PINB & (1 << ECHOPIN) )
-		{
-			return TCNT1;
-		}
-		// Timer overflow
-		if( TIFR1 & _BV(TOV1) )
-		{
-			ser_writeln("Overflow");
-			TIFR1 |= ~_BV(0);
-			return TCNT0;
-		}
-	}
-	
-	//uint32_t duration_cm = duration /29 / 2;
-}
-
-
+volatile uint8_t tot_overflow;
 
 
 // Serial
@@ -97,6 +56,72 @@ void ser_writeln(const char* line) {
 }
 
 
+// UltrasoneSensor
+void timer_init()
+{
+	//Zet de pre-scaler op 1024
+	TCCR1B = (1<<CS12)|(1<<CS10);
+}
+void timer_start()
+{
+	TIMSK |= (1 << TOIE1);
+	sei();
+	TCNT1 = 0;
+	tot_overflow = 0;
+}
+void write(uint8_t pin, uint8_t val)
+{
+	if (val == LOW) {
+		PORTB &= ~(_BV(pin)); // clear bit
+	} else {
+		PORTB |= _BV(pin); // set bit
+	}
+}
+
+uint32_t pulseDuration(void){
+	// Clear trigger
+	write(TRIGPIN, LOW);
+	_delay_us(2);
+
+	// Set trigger for 10 microseconds
+	write(TRIGPIN, HIGH);
+	timer_start();
+	_delay_us(10);
+	write(TRIGPIN, LOW);
+
+	char poep[200];
+
+	while(1)
+	{
+		sprintf(poep, "Message: %s", (char*)PINB);
+		ser_writeln(poep);
+		// Check voor echo
+		if( PINB & (1 << ECHOPIN) )
+		{
+			return tot_overflow; // * TCNT1;
+		}
+		// Timer overflow
+		/*if( TIFR1 & _BV(TOV1) )
+		{
+			ser_writeln("Overflow");
+			TIFR1 |= ~_BV(0);
+			return TCNT0;
+		}*/
+	}
+
+	//uint32_t duration_cm = duration /29 / 2;
+}
+
+
+// TIMER1 overflow interrupt service routine
+// called whenever TCNT1 overflows
+ISR(TIMER1_OVF_vect)
+{
+	// keep a track of number of overflows
+	tot_overflow++;
+	ser_writeln("Nog een overflow jonguh");
+}
+
 
 
 int main(void)
@@ -104,12 +129,13 @@ int main(void)
 	uart_init();
 	timer_init();
 	_delay_ms(1000);
-	
+
+
 	// Ledje
 	DDRD |= (1 << LICHTPIN);	// 2 is output
-	
+
 	// UltrasoneSensor
-	DDRB |= (1 << TRIGPIN);	// 8 is output, trigger
+	DDRB |= (1 << TRIGPIN);		// 8 is output, trigger
 	DDRB &= ~(1 << ECHOPIN);	// 9 is input, echo
 	
 	char buffer[200];
