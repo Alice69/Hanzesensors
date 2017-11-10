@@ -3,7 +3,7 @@ import serial, time
 
 def callTest():
     time.sleep(1000)
-    # Misschien toegang naar controller ofzow? send callback << function
+    # Misschien toegang naar controller ofzow? send callback
 
 
 class Connection:
