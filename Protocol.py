@@ -1,18 +1,12 @@
 import serial, time
 
 
-def callTest():
-    time.sleep(1000)
-    # Misschien toegang naar controller ofzow? send callback
-
-
 class Connection:
     def __init__(self):
         self.comList = {}
         self.protocol = Protocol()
 
-    def connect(self, comp):
-        comport = "COM4" #comInput.get()
+    def connect(self, callback, comport):
         print("try connect to " + comport)
         try:
             ser = serial.Serial(comport, 19200, timeout=4)
@@ -23,6 +17,7 @@ class Connection:
         self.protocol.changeSer(comport, ser)
         if self.protocol.handshake():
             self.comList[comport] = ser
+            callback()
         else:
             print("Handshake failed!")
 

@@ -39,8 +39,8 @@ class SideMenu(Canvas):
         self.grid(column=0, row=0, sticky=NSEW)
         self.columnconfigure(0, weight=3)
         self.columnconfigure(1, weight=1)
-        self.rowconfigure(0, weight=1)
-        self.rowconfigure(1, weight=20)
+        self.rowconfigure(0, weight=2)
+        self.rowconfigure(1, weight=16)
         self.rowconfigure(2, weight=1)
 
         self.label = Label(self, text="Zonneschermen:", fg='#666666', bg='#dddddd', font=("Helvetica", 12, "bold italic"))
@@ -51,16 +51,17 @@ class SideMenu(Canvas):
         self.scrollbar.grid(row=1, column=2, sticky=NS)
         #self.config(yscrollcommand = self.scrollbar.set)
 
-        self.mylist = Listbox(self, width=0, bd=1, bg='#dddddd', relief='flat', yscrollcommand=self.scrollbar.set)
+        #self.mylist = Listbox(self, width=0, bd=1, bg='#dddddd', relief='flat', yscrollcommand=self.scrollbar.set)
+        self.mylist = Canvas(self, width=200, bg='#dddddd', yscrollcommand=self.scrollbar.set)
         self.mylist.grid(columnspan=2, row=1, sticky=NSEW)
-        for line in range(40):
-            self.mylist.insert(END, "Naamloos COM" + str(line))
+        '''for line in range(40):
+            self.mylist.insert(END, "Naamloos COM" + str(line))'''
         self.scrollbar.config(command=self.mylist.yview)
 
-        self.comport = StringVar()
-        self.inputField = Entry(self, width=0, textvariable=self.comport)
+        self.comInput = StringVar()
+        self.inputField = Entry(self, bd=0, textvariable=self.comInput)
         self.inputField.grid(column=0, row=2, sticky=NSEW)
-        self.button = Button(self, text="Connect", command=controller.startConnection)
+        self.button = Button(self, text="Connect", command=lambda: controller.startConnection(self.comInput.get()))
         self.button.grid(columnspan=2, column=1, row=2, sticky=NSEW)
 
 
@@ -72,44 +73,73 @@ class DataMenu(Frame):
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=1)
         self.columnconfigure(2, weight=1)
-        self.rowconfigure(0, weight=1)
-        self.rowconfigure(1, weight=20)
-        self.rowconfigure(2, weight=1)
+        self.rowconfigure(0, weight=2)
+        self.rowconfigure(1, weight=16)
+        self.rowconfigure(2, weight=2)
 
-        # buttons op frame
-        self.button = Button(self, text="Zonnescherm", command=lambda: controller.show_frame(ZonneschermFrame))
-        self.button.grid(column=0, row=0, sticky=NSEW)
-        self.button1 = Button(self, text="Metingen", command=lambda: controller.show_frame(MetingenFrame))
-        self.button1.grid(column=1, row=0, sticky=NSEW)
-        self.button2 = Button(self, text="Instellingen", command=lambda: controller.show_frame(InstellingenFrame))
-        self.button2.grid(column=2, row=0, sticky=NSEW)
+        self.controller = controller
+        self.tabColor = '#FFF'
+        self.tabSelectColor = '#2b78e4'
+        self.tabFont = ("Helvetica", 12, "bold")
 
-        self.progressBar = Label(self, bg='#5bff6c')
+        # tabs op frame
+        self.tab1= Button(self, text="Zonnescherm", bd=1, relief='solid', bg=self.tabSelectColor, fg='#FFF', font=self.tabFont, command=self.changeTabZonnescherm)
+        self.tab1.grid(column=0, row=0, sticky=NSEW)
+        self.tab2 = Button(self, text="Metingen", bd=1, relief='solid', bg=self.tabColor, font=self.tabFont, command=self.changeTabMetingen)
+        self.tab2.grid(column=1, row=0, sticky=NSEW)
+        self.tab3 = Button(self, text="Instellingen", bd=1, relief='solid', bg=self.tabColor, font=self.tabFont, command=self.changeTabInstellingen)
+        self.tab3.grid(column=2, row=0, sticky=NSEW)
+
+        self.progressBar = Label(self, bg='#5bff6c', bd=1, relief='solid')
         self.progressBar.grid(columnspan=3, row=2, sticky=NSEW)
+
+    def changeTabZonnescherm(self):
+        self.controller.show_frame(ZonneschermFrame)
+        self.tab1.config(bg=self.tabSelectColor, fg='#FFF')
+        self.tab2.config(bg=self.tabColor, fg='#000')
+        self.tab3.config(bg=self.tabColor, fg='#000')
+
+    def changeTabMetingen(self):
+        self.controller.show_frame(MetingenFrame)
+        self.tab1.config(bg=self.tabColor, fg='#000')
+        self.tab2.config(bg=self.tabSelectColor, fg='#FFF')
+        self.tab3.config(bg=self.tabColor, fg='#000')
+
+    def changeTabInstellingen(self):
+        self.controller.show_frame(InstellingenFrame)
+        self.tab1.config(bg=self.tabColor, fg='#000')
+        self.tab2.config(bg=self.tabColor, fg='#000')
+        self.tab3.config(bg=self.tabSelectColor, fg='#FFF')
 
 
 class DataFrame(Frame):
     def __init__(self, master):
         Frame.__init__(self, master)
         self.config(bg='#FFF')
-        self.grid(columnspan=3, row=1, sticky=NSEW)
+        self.grid(columnspan=3, row=1, padx=16, pady=16, sticky=NSEW)
 
 class ZonneschermFrame(DataFrame):
     def __init__(self, master):
         DataFrame.__init__(self, master)
 
-        for col in range(5):
-            self.columnconfigure(col, weight=1)
-        self.rowconfigure(0, weight=1)
-        self.rowconfigure(1, weight=2)
-        self.rowconfigure(2, weight=1)
-        self.rowconfigure(3, weight=2)
-        self.rowconfigure(4, weight=1)
+        for i in range(12):
+            self.columnconfigure(i, weight=1)
 
-        self.button = Button(self, text = "Oprollen", bg = '#5bff6c', border=1, relief='flat', font=("Helvetica", 10, "bold"))
-        self.button.grid(column=1, row=2, sticky = NSEW)
-        self.button1 = Button(self, text = "Uitrollen", bg = '#ff6b5b', border=1, relief='flat', font=("Helvetica", 10, "bold"))
-        self.button1.grid(column=3, row=2, sticky=NSEW)
+        for i in range(12):
+            self.rowconfigure(i, weight=1)
+
+        self.modusLabel = Label(self, text="Modus: ", font=("Helvetica", 8, "bold"))
+        self.modusLabel.grid(column=9, row=0, sticky=NSEW)
+
+        self.btnMode_1 = Button(self, text = "Automatisch", bg = '#cccccc', bd=2, relief='solid', font=("Helvetica", 6, "bold"))
+        self.btnMode_1.grid(column=10, row=0, sticky = NSEW)
+        self.btnMode_2 = Button(self, text = "Handmatig", bg = '#674ea7', fg='#FFF', bd=2, relief='solid', font=("Helvetica", 6, "bold"))
+        self.btnMode_2.grid(column=11, row=0, sticky = NSEW)
+
+        self.button = Button(self, text = "Oprollen", bg = '#5bff6c', bd=2, relief='solid', font=("Helvetica", 10, "bold"))
+        self.button.grid(column=2, columnspan=4, row=5, rowspan=2, sticky = NSEW)
+        self.button1 = Button(self, text = "Uitrollen", bg = '#ff6b5b', bd=2, relief='solid', font=("Helvetica", 10, "bold"))
+        self.button1.grid(column=8, columnspan=3, row=5, rowspan=2, sticky=NSEW)
 
 class MetingenFrame(DataFrame):
     def __init__(self, master):
@@ -121,11 +151,11 @@ class MetingenFrame(DataFrame):
         self.rowconfigure(1, weight=1)
 
         self.label = Label(self, text="Grafiek1")
-        self.label.grid(column=0, row=0, sticky=NSEW)
+        self.label.grid(column=0, row=0, padx=8, pady=8, sticky=NSEW)
         self.label1 = Label(self, text="Grafiek2")
-        self.label1.grid(column=1, row=0, sticky=NSEW)
+        self.label1.grid(column=1, row=0, padx=8, pady=8, sticky=NSEW)
         self.tabel = Label(self, text="Tabel")
-        self.tabel.grid(column=0, row=1, sticky=NSEW)
+        self.tabel.grid(column=0, row=1, padx=8, pady=8, sticky=NSEW)
 
 class InstellingenFrame(DataFrame):
     def __init__(self, master):
