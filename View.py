@@ -29,7 +29,12 @@ class MainFrame(Tk):
         self.frames[frame].tkraise()
 
     def start_mainloop(self):
+        self.protocol("WM_DELETE_WINDOW", self.exit)
         self.mainloop()
+
+    def exit(self):
+        controller.stop()
+        self.destroy()
 
 
 class SideMenu(Canvas):
@@ -58,10 +63,10 @@ class SideMenu(Canvas):
             self.mylist.insert(END, "Naamloos COM" + str(line))'''
         self.scrollbar.config(command=self.mylist.yview)
 
-        self.comInput = StringVar()
-        self.inputField = Entry(self, bd=0, textvariable=self.comInput)
+        comInput = StringVar()
+        self.inputField = Entry(self, bd=0, textvariable=comInput)
         self.inputField.grid(column=0, row=2, sticky=NSEW)
-        self.button = Button(self, text="Connect", command=lambda: controller.startConnection(self.comInput.get()))
+        self.button = Button(self, text="Connect", command=lambda: controller.startConnection(comInput.get()))
         self.button.grid(columnspan=2, column=1, row=2, sticky=NSEW)
 
 
@@ -189,7 +194,8 @@ class InstellingenFrame(DataFrame):
         #self.label10 = Label(self, text="ºC", bg="#FFF")
         #self.label10.grid(columnspan=2, row=5, sticky=E)
 
-        self.entry1 =  Entry(self, highlightthickness=2, highlightbackground="black", width=50, font=8)
+        name = StringVar()
+        self.entry1 =  Entry(self, highlightthickness=2, highlightbackground="black", width=50, font=8, textvariable=name)
         self.entry1.grid(column=2, row=0, sticky=W)
 
         self.scale1 = Scale(self, orient=HORIZONTAL,troughcolor="black",bg = "#FFF", highlightbackground="#FFF",length=300,relief=FLAT,sliderrelief=FLAT, width=8, font=8)
@@ -197,14 +203,14 @@ class InstellingenFrame(DataFrame):
         self.scale2 = Scale(self, orient=HORIZONTAL,troughcolor="black",bg = "#FFF", highlightbackground="#FFF",length=300,relief=FLAT,sliderrelief=FLAT, width=8, font=8)
         self.scale2.grid(column=2, row=2,sticky=W)
 
-        self.spinbox1 = Spinbox(self, from_= 0, to=100, justify=CENTER,width=5, font=8)
+        self.spinbox1 = Spinbox(self, from_= 0, to=10, justify=CENTER,width=5, font=8)
         self.spinbox1.grid(column=2, row=5,sticky=W)
-        self.spinbox1 = Spinbox(self, from_= 0, to=100, justify=CENTER, width=5,font=8)
+        self.spinbox1 = Spinbox(self, from_= 0, to=10, justify=CENTER, width=5,font=8)
         self.spinbox1.grid(column=2, row=6,sticky=W)
-        self.spinbox1 = Spinbox(self, from_= 0, to=100, justify=CENTER, width=5,font=8)
+        self.spinbox1 = Spinbox(self, from_= 0, to=10, justify=CENTER, width=5,font=8)
         self.spinbox1.grid(column=2, row=9,sticky=W)
-        self.spinbox1 = Spinbox(self, from_= 0, to=100, justify=CENTER, width=5,font=8)
+        self.spinbox1 = Spinbox(self, from_= 0, to=10, justify=CENTER, width=5,font=8)
         self.spinbox1.grid(column=2, row=10,sticky=W)
 
-        self.button_opslaan = Button(self,text="Opslaan",font=8)
+        self.button_opslaan = Button(self,text="Opslaan",font=8, command=lambda: controller.startSaveSettings(name.get(), self.scale1.get(), self.scale2.get()))
         self.button_opslaan.grid(columnspan=3,row=11)
