@@ -1,25 +1,45 @@
 from Protocol import *
 from threading import Timer
+import sys
 
-connection = Connection()
-# Misschien de lijst met compoorten toch maar hierin?
+protocol = Protocol()
 
 class Controller:
-    def __init__(self):
-        self.update()
+    def myInit(self, mainFrame):
+        self.mainFrame = mainFrame
+        self.running = True
+        self.t_update = None
+        self.startUpdate()
 
-    def update(self):
-        # check voor connecties, sturen van ping, getname etc.
-        print( connection.protocol.getName() )
-        t = Timer(0.5, self.update)
-        t.start()
+    def stop(self):
+        self.running = False
+        self.t_update.cancel()
+        #sys.exit(1)
+
+    def startUpdate(self):
+        self.t_update = Timer(10, protocol.update, [self.finnishUpdate])
+        self.t_update.start()
+
+    def finnishUpdate(self, devices):
+        print("update", devices)
+        self.mainFrame.updateInstellingen(devices)
+        if self.running:
+            self.startUpdate()
 
     def startConnection(self, comInput):
-        if str.strip(comInput) == "":
+        if str.strip(comInput) == "" and len(str.strip(comInput)) > 19:
             return None
         print("start call")
-        t = Timer(0.5, connection.connect, [self.finnishConnection, comInput])
-        t.start()
+        t_connection = Timer(0.5, protocol.connect, [self.finnishConnection, comInput])
+        t_connection.start()
 
     def finnishConnection(self):
         print("Device connected!")
+
+    def startSaveSettings(self, name):
+        print("Saving..")
+        t_save = Timer(0.5, protocol.saveSettings, [self.finnishSaveSettings, name])
+        t_save.start()
+
+    def finnishSaveSettings(self):
+        print("Settings are saved! :)")
