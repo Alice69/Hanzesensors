@@ -16,10 +16,10 @@ class MainFrame(Tk):
         self.dataMenu = DataMenu(self, self)
 
         self.frames = {}
-        for F in (ZonneschermFrame, MetingenFrame, InstellingenFrame):
+        for F in (EmptyFrame, ZonneschermFrame, MetingenFrame, InstellingenFrame):
             self.frames[F] = F(self.dataMenu)
 
-        self.show_frame(ZonneschermFrame)
+        self.show_frame(EmptyFrame)
 
     def getCenterGeometry(self, w, h):
         return (w, h, int(self.winfo_screenwidth() / 2) - int(w / 2), int(self.winfo_screenheight() / 2) - int(h / 2))
@@ -27,12 +27,19 @@ class MainFrame(Tk):
     def show_frame(self, frame):
         self.frames[frame].tkraise()
 
-    def updateInstellingen(self, devices):
-        items = []
-        for com, info in devices.items():
-            print(info['naam'])
-            items.append((info['naam'], 0, 0))
-        self.sideMenu.updateList(items)
+    def updateGUI(self, devices, data, instellingen):
+        for k, device in devices.items():
+            if device['selected'] == 1:
+                self.dataMenu.tab1.config(state=NORMAL)
+                self.dataMenu.tab2.config(state=NORMAL)
+                self.dataMenu.tab3.config(state=NORMAL)
+                self.frames[InstellingenFrame].updateInstellingen(instellingen)
+            else:
+                self.dataMenu.tab1.config(state=DISABLED)
+                self.dataMenu.tab2.config(state=DISABLED)
+                self.dataMenu.tab3.config(state=DISABLED)
+        self.sideMenu.updateMenu(devices)
+
 
     def start_mainloop(self):
         self.protocol("WM_DELETE_WINDOW", self.exit)
@@ -70,25 +77,25 @@ class SideMenu(Canvas):
         self.button = Button(self, text="Connect", command=lambda: controller.startConnection(comInput.get()))
         self.button.grid(columnspan=2, column=1, row=2, sticky=NSEW)
 
-    def updateList(self, items):
+    def updateMenu(self, devices):
         itemHeight = 60
         itemWidth = self.mylist.winfo_width()-(self.scrollbar.winfo_width()/2)
         dotSize = 16
         statusColor = ('#ff6b5b', '#5bff6c')
-        selectColor = (('#FFF', '#000'),('#2b78e4', '#FFF'))
+        selectColor = [('#FFF', '#000'), ('#2b78e4', '#FFF')]
 
-        def switch(comport):
-            print("Change to " + comport)
         self.mylist.delete("all")
         listBtns = []
-        for i, item in enumerate(items):
+        for i, item in enumerate(devices.items()):
+            com, data = item[0], item[1]
             y = (i * itemHeight)
-            listBtns.append(self.mylist.create_rectangle(0,y, itemWidth, y + itemHeight, fill=selectColor[item[2]][0]))
-            self.mylist.tag_bind(listBtns[i], '<ButtonPress-1>', lambda event: switch(item[0]))
-            self.mylist.create_oval(10, y+(itemHeight/2)-(dotSize/2), 10+dotSize, y+(itemHeight/2)+(dotSize/2), fill=statusColor[item[1]])
-            self.mylist.create_text(itemWidth/2, (i * itemHeight) + (itemHeight/2), text=item[0], fill=selectColor[item[2]][1], font=("Helvetica", 10, "bold"))
+            self.mylist.create_rectangle(0,y, itemWidth, y + itemHeight, tags="btn-{}".format(i), fill=selectColor[data['selected']][0])
+            self.mylist.tag_bind("btn-{}".format(i), '<ButtonPress-1>', lambda event: controller.startConnection(com))
+            #self.mylist.tag_bind(listBtns[i], '<ButtonPress-1>', lambda event: controller.select(i))
+            self.mylist.create_oval(10, y+(itemHeight/2)-(dotSize/2), 10+dotSize, y+(itemHeight/2)+(dotSize/2), fill=statusColor[data['status']])
+            self.mylist.create_text(itemWidth/2, (i * itemHeight) + (itemHeight/2), text=data['naam'], fill=selectColor[data['selected']][1], font=("Helvetica", 10, "bold"))
         self.scrollbar.config(command=self.mylist.yview)
-        self.mylist.config(yscrollcommand=self.scrollbar.set, scrollregion=(0,0,0,len(items)*itemHeight))
+        self.mylist.config(yscrollcommand=self.scrollbar.set, scrollregion=(0,0,0,len(devices)*itemHeight))
 
 
 class DataMenu(Frame):
@@ -109,11 +116,11 @@ class DataMenu(Frame):
         self.tabFont = ("Helvetica", 12, "bold")
 
         # tabs op frame
-        self.tab1= Button(self, text="Zonnescherm", bd=1, relief='solid', bg=self.tabSelectColor, fg='#FFF', font=self.tabFont, command=self.changeTabZonnescherm)
+        self.tab1= Button(self, text="Zonnescherm", bd=1, relief='solid', bg=self.tabColor, font=self.tabFont, state=DISABLED, command=self.changeTabZonnescherm)
         self.tab1.grid(column=0, row=0, sticky=NSEW)
-        self.tab2 = Button(self, text="Metingen", bd=1, relief='solid', bg=self.tabColor, font=self.tabFont, command=self.changeTabMetingen)
+        self.tab2 = Button(self, text="Metingen", bd=1, relief='solid', bg=self.tabColor, font=self.tabFont, state=DISABLED, command=self.changeTabMetingen)
         self.tab2.grid(column=1, row=0, sticky=NSEW)
-        self.tab3 = Button(self, text="Instellingen", bd=1, relief='solid', bg=self.tabColor, font=self.tabFont, command=self.changeTabInstellingen)
+        self.tab3 = Button(self, text="Instellingen", bd=1, relief='solid', bg=self.tabColor, font=self.tabFont, state=DISABLED, command=self.changeTabInstellingen)
         self.tab3.grid(column=2, row=0, sticky=NSEW)
 
         #self.progressBar = Label(self, bg='#5bff6c', bd=1, relief='solid')
@@ -150,6 +157,11 @@ class DataFrame(Frame):
         Frame.__init__(self, master)
         self.config(bg='#FFF')
         self.grid(columnspan=3, row=1, padx=16, pady=16, sticky=NSEW)
+
+class EmptyFrame(DataFrame):
+    def __init__(self, master):
+        DataFrame.__init__(self, master)
+
 
 class ZonneschermFrame(DataFrame):
     def __init__(self, master):
@@ -226,8 +238,7 @@ class InstellingenFrame(DataFrame):
         #self.label10 = Label(self, text="ºC", bg="#FFF")
         #self.label10.grid(columnspan=2, row=5, sticky=E)
 
-        name = StringVar()
-        self.entry1 =  Entry(self, highlightthickness=2, highlightbackground="black", width=50, font=8, textvariable=name)
+        self.entry1 =  Entry(self, highlightthickness=2, highlightbackground="black", width=50, font=8)
         self.entry1.grid(column=2, row=0, sticky=W)
 
         self.scale1 = Scale(self, from_= 1, to=10, orient=HORIZONTAL,troughcolor="black",bg = "#FFF", highlightbackground="#FFF",length=300,relief=FLAT,sliderrelief=FLAT, width=8, font=8)
@@ -237,16 +248,33 @@ class InstellingenFrame(DataFrame):
 
         self.spinbox1 = Spinbox(self, from_= 0, to=50, justify=CENTER,width=5, font=8)
         self.spinbox1.grid(column=2, row=5,sticky=W)
-        self.spinbox1 = Spinbox(self, from_= 1, to=10, justify=CENTER, width=5,font=8)
-        self.spinbox1.grid(column=2, row=6,sticky=W)
-        self.spinbox1 = Spinbox(self, from_= 0, to=50, justify=CENTER, width=5,font=8)
-        self.spinbox1.grid(column=2, row=9,sticky=W)
-        self.spinbox1 = Spinbox(self, from_= 1, to=10, justify=CENTER, width=5,font=8)
-        self.spinbox1.grid(column=2, row=10,sticky=W)
+        self.spinbox2 = Spinbox(self, from_= 1, to=10, justify=CENTER, width=5,font=8)
+        self.spinbox2.grid(column=2, row=6,sticky=W)
+        self.spinbox3 = Spinbox(self, from_= 0, to=50, justify=CENTER, width=5,font=8)
+        self.spinbox3.grid(column=2, row=9,sticky=W)
+        self.spinbox4 = Spinbox(self, from_= 1, to=10, justify=CENTER, width=5,font=8)
+        self.spinbox4.grid(column=2, row=10,sticky=W)
 
-        self.button_opslaan = Button(self,text="Opslaan",font=8, command=lambda: controller.startSaveSettings(name.get()))
+        self.button_opslaan = Button(self,text="Opslaan",font=8, command=lambda: controller.startSaveSettings(self.entry1.get()))
         self.button_opslaan.grid(columnspan=3,row=11)
 
+    def updateInstellingen(self, instellingen):
+        if instellingen != {}:
+            self.entry1.delete(0, "end")
+            self.entry1.insert(0, instellingen['naam'])
+
+            self.scale1.set(instellingen["getUitrolstand"][0])
+            self.scale2.set(instellingen["getUitrolstand"][1])
+
+            self.spinbox1.delete(0, "end")
+            self.spinbox1.insert(0, instellingen["getSettingsTemp"][0])
+            self.spinbox3.delete(0, "end")
+            self.spinbox3.insert(0, instellingen["getSettingsTemp"][1])
+
+            self.spinbox2.delete(0, "end")
+            self.spinbox2.insert(0, instellingen["getSettingsLicht"][0])
+            self.spinbox4.delete(0, "end")
+            self.spinbox4.insert(0, instellingen["getSettingsLicht"][1])
 
 controller = Controller()
 mainFrame = MainFrame(1024, 600)

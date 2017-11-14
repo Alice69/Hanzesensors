@@ -21,20 +21,28 @@ class Protocol:
 
     def selectSer(self, com):
         self.selectConn = (com, self.comList.get(com))
+        print(self.selectConn)
 
-    def connect(self, callback, comport):
+    def connect(self, succes, fail, comport):
+        if comport in self.comList.keys():
+            self.selectSer(comport)
+            succes()
+            return
+
         print("try connect to " + comport)
         try:
             self.connection = (comport, serial.Serial(comport, 19200, timeout=4))
         except serial.SerialException:
             print("Can't connect " + comport)
-            return None
+            fail()
+            return
         time.sleep(2)
         if self.handshake():
             self.comList[comport] = self.connection[1]
-            callback()
+            succes()
         else:
             print("Handshake failed!")
+            fail()
 
 
     '''------------------------
@@ -43,16 +51,16 @@ class Protocol:
     def request(self, command, data=None):
         if self.connection[1] == None:
             #print("Serial port connection is None")
-            return None
+            return
 
-        print("command: {} to {}".format(command, self.connection[0]))
+        # print("command: {} to {}".format(command, self.connection[0]))
 
         try:
             self.connection[1].write((command + "\n").encode('ascii'))
             if data:
                 self.connection[1].write((data + "\n").encode('ascii'))
         except serial.SerialException:
-            return None
+            return
 
         test = None
         info = None
@@ -87,22 +95,40 @@ class Protocol:
 
     def update(self, callback):
         devices = {}
+        instellingen = {}
+        data = {}
         for com in list(self.comList.keys()):
             self.changeSer(com, self.comList.get(com))
             if self.ping():
-                devices[com] = {
-                    "naam": self.getNaam(),
-                    "tempSettings": self.getSettingsTemp(),
-                    "lichtSettings": self.getSettingsLicht(),
-                    "uitrolSettings": self.getUitrolstand(),
-                    "temperatuur": self.getSensorTemp(),
-                    "lichtsterkte": self.getSensorLicht(),
-                    "getAfstand": self.getAfstand(),
-                    "getModus": self.getModus()
-                }
+                naam = self.getNaam()
+                status = 0 # Dit is uitgerold, opgerold, of bezig (wordt berekent via afstand)
+                if self.selectConn[0] == com:
+                    devices[com] = {
+                        "selected": 1,
+                        "naam": naam,
+                        "status": status
+                    }
+                    data = {
+                        "getSensorTemp": self.getSensorTemp(),
+                        "getSensorLicht": self.getSensorLicht(),
+                        "getAfstand": self.getAfstand(),
+                        "getModus": self.getModus()
+                    }
+                    instellingen = {
+                        "naam": naam,
+                        "getSettingsTemp": self.getSettingsTemp(),
+                        "getSettingsLicht": self.getSettingsLicht(),
+                        "getUitrolstand": self.getUitrolstand()
+                    }
+                else:
+                    devices[com] = {
+                        "selected": 0,
+                        "naam": naam,
+                        "status": status
+                    }
             else:
                 self.comList.pop(com)
-        callback(devices)
+        callback(devices, data, instellingen)
 
     def ping(self):
         return (self.request("ping") == ("OK", "pong"))
@@ -174,7 +200,6 @@ class Protocol:
 
     # Set:
     def saveSettings(self, callback, name):
-        self.selectSer("COM5")
         self.connection = self.selectConn
         self.setNaam(name)
         callback()

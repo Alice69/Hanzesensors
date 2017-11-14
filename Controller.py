@@ -16,30 +16,38 @@ class Controller:
         self.t_update.cancel()
         #sys.exit(1)
 
-    def startUpdate(self):
-        self.t_update = Timer(10, protocol.update, [self.finnishUpdate])
+    def startUpdate(self, timer=10):
+        self.t_update = Timer(timer, protocol.update, [self.finnishUpdate])
         self.t_update.start()
 
-    def finnishUpdate(self, devices):
-        print("update", devices)
-        self.mainFrame.updateInstellingen(devices)
+    def finnishUpdate(self, devices, data, instellingen):
+        #print("update", devices)
+        self.mainFrame.updateGUI(devices, data, instellingen)
         if self.running:
             self.startUpdate()
 
     def startConnection(self, comInput):
-        if str.strip(comInput) == "" and len(str.strip(comInput)) > 19:
+        if str.strip(comInput) == "":
             return None
         print("start call")
-        t_connection = Timer(0.5, protocol.connect, [self.finnishConnection, comInput])
+        self.t_update.cancel()
+        t_connection = Timer(0.5, protocol.connect, [self.finnishConnection, self.failedConnection, comInput])
         t_connection.start()
 
     def finnishConnection(self):
         print("Device connected!")
+        self.startUpdate(0)
+
+    def failedConnection(self):
+        print("Connection failed!")
+        self.startUpdate()
 
     def startSaveSettings(self, name):
         print("Saving..")
+        self.t_update.cancel()
         t_save = Timer(0.5, protocol.saveSettings, [self.finnishSaveSettings, name])
         t_save.start()
 
     def finnishSaveSettings(self):
         print("Settings are saved! :)")
+        self.startUpdate(0)
