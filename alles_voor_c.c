@@ -1,15 +1,18 @@
 #include <avr/io.h>
+#include <avr/interrupt.h>
 #include <stdlib.h>
 #include <avr/sfr_defs.h>
 #define F_CPU 16E6
 #include <util/delay.h>
+#include <string.h>
+#include <stdio.h>
 // output on USB = PD1 = board pin 1
 // datasheet p.190; F_OSC = 16 MHz & baud rate = 19.200
 #define UBBRVAL 51
 
 #include <avr/eeprom.h>
 #include "AVR_TTC_scheduler.h"
-
+#include "Ultrasoon.h"
 
 /************************************************************************/
 /* EEPROM variables                                                     */
@@ -27,9 +30,15 @@ uint8_t EEMEM MODUS = 0;		//0=Automatisch, 1=Handmatig
 // Metingen
 uint8_t EEMEM TEMPERATUUR;
 uint8_t EEMEM LICHT;
-uint8_t EEMEM AFSTAND;
+uint16_t EEMEM AFSTAND;
 
+/************************************************************************/
+/* Ultrasoon variables                                                  */
+/************************************************************************/
 
+volatile uint32_t overFlowCounter = 0;
+volatile uint32_t trig_counter = 0;
+volatile uint32_t no_of_ticks = 0;
 
 /************************************************************************/
 /* Seriële verbinding                                                   */
@@ -116,6 +125,120 @@ void meetLicht() {
 	eeprom_update_byte(&LICHT, lichtsterkte); // Ipv random, sensor uitlezen
 }
 
+void init_afstandssensor() {
+	TRIG_OUTPUT_MODE();     // Set Trigger pin as output
+	ECHO_INPUT_MODE();      // Set Echo pin as input
+}
+
+void trigger_sonar(){
+	TRIG_LOW();             // Clear pin before setting it high
+	_delay_us(2);           // Clear to zero and give time for electronics to set
+	TRIG_HIGH();            // Set pin high
+	_delay_us(12);          // Send high pulse for minimum 10us
+	TRIG_LOW();             // Clear pin
+	_delay_us(1);           // Delay not required, but just in case...
+}
+
+ISR(TIMER0_OVF_vect){   // Timer0 overflow interrupt
+	overFlowCounter++;
+	TCNT0=0;
+}
+
+uint16_t lees_afstandssensor(){
+	uint16_t dist_in_cm = 0;
+	trigger_sonar();                    // send a 10us high pulse
+
+	TCNT0=0;                            // reset timer
+	TCCR0B |= (1<<CS10);              // start 16 bit timer with no prescaler
+	
+	TIMSK0 = 1<<TOIE0; // enable overflow interrupt on timer0
+	overFlowCounter=0;                  // reset overflow counter
+	
+	while(!(ECHO_PIN & (1<<ECHO_BIT))){   // while echo pin is still low
+		trig_counter++;
+		uint32_t max_response_time = SONAR_TIMEOUT;
+		if (trig_counter > max_response_time){   // SONAR_TIMEOUT
+			return TRIG_ERROR;
+		}
+	}
+	
+	TCNT0=0;                            // reset timer
+	TCCR0B |= (1<<CS10);              // start 16 bit timer with no prescaler
+	TIMSK0 = 1<<TOIE0;					// enable overflow interrupt on timer0
+	overFlowCounter=0;                  // reset overflow counter
+	
+	while((ECHO_PIN & (1<<ECHO_BIT))){    // while echo pin is still high
+		if (((overFlowCounter*TIMER_MAX)+TCNT0) > SONAR_TIMEOUT){
+			return ECHO_ERROR;          // No echo within sonar range
+		}
+	};
+	
+	TCCR0B = 0x00;                      // stop 16 bit timer with no prescaler
+	TIMSK0=0;
+	no_of_ticks = ((overFlowCounter*TIMER_MAX)+TCNT0);  // counter count
+	dist_in_cm = (no_of_ticks/(CONVERT_TO_CM*CYCLES_PER_US));   // distance in cm	
+	return (dist_in_cm);	
+}
+
+void meetafstand() {
+	uint16_t afstand = lees_afstandssensor();
+	if (afstand > 20) {
+		return;
+	}
+	afstand = (afstand * 10) / 15;
+	
+	uint8_t proces = 0;
+	
+	if (TEMPERATUUR > 16 || LICHT > 8) {
+		proces = 1; // Moet uitrollen
+	}
+	if (TEMPERATUUR < 12 || LICHT < 4) {
+		proces = 0; // Moet oprollen
+	}
+	
+	if (proces == 1)
+	{
+		if (afstand > 8){
+			roodLampje();
+		}
+		else{
+			geelLampje();
+		}
+	}else{
+		if (afstand <= 2) {
+			groenLampje();
+		}
+		else {
+			geelLampje();
+		}
+	
+		
+	}
+	
+	eeprom_update_word(&AFSTAND, afstand); // Ipv random, sensor uitlezen
+}
+
+
+/************************************************************************/
+/* Ledjes                                                               */
+/************************************************************************/
+
+void roodLampje(){
+	PORTD |= (1 << PD4);	// Rood aan
+	PORTD &= ~(1 << PD3);	// Geel uit
+	PORTD &= ~(1 << PD2);	// Groen uit
+}
+void groenLampje(){
+	PORTD |= (1 << PD2);	// Groen aan
+	PORTD &= ~(1 << PD3);	// Geel uit
+	PORTD &= ~(1 << PD4);	// Rood uit
+}
+void geelLampje(){
+	PORTD ^= (1 << PD3);	// Geel aan
+	PORTD &= ~(1 << PD4);	// Rood uit
+	PORTD &= ~(1 << PD2);	// Groen uit
+}
+
 
 
 
@@ -124,9 +247,15 @@ void meetLicht() {
 /************************************************************************/
 int main(void)
 {	
+	
+	DDRB=0;
+	DDRD=0xFF;
 	uart_init();
 	init_adc();
+	
 	SCH_Init_T1();
+	init_afstandssensor();
+	//sei();
 	_delay_ms(1000);
 	
 	char command[200];		// buffer for command
@@ -140,6 +269,7 @@ int main(void)
 	
 	SCH_Add_Task(meetTemperatuur, 0, 4000);
 	SCH_Add_Task(meetLicht, 0, 3000);
+	SCH_Add_Task(meetafstand, 0, 100);
 	SCH_Start();
 	
 	
@@ -216,7 +346,7 @@ int main(void)
 		}
 		
 		if(!strcmp(command, "getAfstand")) {
-			uint8_t data = 14; // Uitlezen van UltrasonoorSensor
+			uint16_t data = eeprom_read_byte(&AFSTAND); // Uitlezen van UltrasonoorSensor
 			sprintf(stringBuffer, "%i", data);
 			ser_writeln(stringBuffer);
 			ok = 1;
