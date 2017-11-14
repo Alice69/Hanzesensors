@@ -1,38 +1,47 @@
 #include <avr/io.h>
+#include <avr/interrupt.h>
 #include <stdlib.h>
 #include <avr/sfr_defs.h>
 #define F_CPU 16E6
 #include <util/delay.h>
+#include <string.h>
+#include <stdio.h>
 // output on USB = PD1 = board pin 1
 // datasheet p.190; F_OSC = 16 MHz & baud rate = 19.200
 #define UBBRVAL 51
 
 #include <avr/eeprom.h>
 #include "AVR_TTC_scheduler.h"
-
+#include "Ultrasoon.h"
 
 /************************************************************************/
 /* EEPROM variables                                                     */
 /************************************************************************/
 // Settings:
-uint8_t EEMEM DEVICE_NAAM [20] = "Naamloos";
-uint8_t EEMEM MIN_UITROLSTAND = 2;
-uint8_t EEMEM MAX_UITROLSTAND = 8;
-uint8_t EEMEM UITROL_TEMPERATUUR = 20;
-uint8_t EEMEM OPROL_TEMPERATUUR = 15;
-uint8_t EEMEM UITROL_LICHT = 8;
-uint8_t EEMEM OPROL_LICHT = 4;
-uint8_t EEMEM MODUS = 0;		//0=Automatisch, 1=Handmatig
+uint8_t EEMEM DEVICE_NAAM [20];
+uint8_t EEMEM MIN_UITROLSTAND;
+uint8_t EEMEM MAX_UITROLSTAND;
+uint8_t EEMEM UITROL_TEMPERATUUR;
+uint8_t EEMEM OPROL_TEMPERATUUR;
+uint8_t EEMEM UITROL_LICHT;
+uint8_t EEMEM OPROL_LICHT;
+uint8_t EEMEM MODUS;		//0=Automatisch, 1=Handmatig
 
 // Metingen
 uint8_t EEMEM TEMPERATUUR;
 uint8_t EEMEM LICHT;
-uint8_t EEMEM AFSTAND;
-
-
+uint16_t EEMEM AFSTAND;
 
 /************************************************************************/
-/* Seriële verbinding                                                   */
+/* Ultrasoon variables                                                  */
+/************************************************************************/
+
+volatile uint32_t overFlowCounter = 0;
+volatile uint32_t trig_counter = 0;
+volatile uint32_t no_of_ticks = 0;
+
+/************************************************************************/
+/* SeriÃ«le verbinding                                                   */
 /************************************************************************/
 void uart_init()
 {
@@ -55,7 +64,7 @@ void ser_write(uint8_t data)
 	loop_until_bit_is_set(UCSR0A, UDRE0);
 	// send the data
 	UDR0 = data;
-	
+
 }
 
 void ser_writeln(const char* line) {
@@ -116,6 +125,120 @@ void meetLicht() {
 	eeprom_update_byte(&LICHT, lichtsterkte); // Ipv random, sensor uitlezen
 }
 
+void init_afstandssensor() {
+	TRIG_OUTPUT_MODE();     // Set Trigger pin as output
+	ECHO_INPUT_MODE();      // Set Echo pin as input
+}
+
+void trigger_sonar(){
+	TRIG_LOW();             // Clear pin before setting it high
+	_delay_us(2);           // Clear to zero and give time for electronics to set
+	TRIG_HIGH();            // Set pin high
+	_delay_us(12);          // Send high pulse for minimum 10us
+	TRIG_LOW();             // Clear pin
+	_delay_us(1);           // Delay not required, but just in case...
+}
+
+ISR(TIMER0_OVF_vect){   // Timer0 overflow interrupt
+	overFlowCounter++;
+	TCNT0=0;
+}
+
+uint16_t lees_afstandssensor(){
+	uint16_t dist_in_cm = 0;
+	trigger_sonar();                    // send a 10us high pulse
+
+	TCNT0=0;                            // reset timer
+	TCCR0B |= (1<<CS10);              // start 16 bit timer with no prescaler
+
+	TIMSK0 = 1<<TOIE0; // enable overflow interrupt on timer0
+	overFlowCounter=0;                  // reset overflow counter
+
+	while(!(ECHO_PIN & (1<<ECHO_BIT))){   // while echo pin is still low
+		trig_counter++;
+		uint32_t max_response_time = SONAR_TIMEOUT;
+		if (trig_counter > max_response_time){   // SONAR_TIMEOUT
+			return TRIG_ERROR;
+		}
+	}
+
+	TCNT0=0;                            // reset timer
+	TCCR0B |= (1<<CS10);              // start 16 bit timer with no prescaler
+	TIMSK0 = 1<<TOIE0;					// enable overflow interrupt on timer0
+	overFlowCounter=0;                  // reset overflow counter
+
+	while((ECHO_PIN & (1<<ECHO_BIT))){    // while echo pin is still high
+		if (((overFlowCounter*TIMER_MAX)+TCNT0) > SONAR_TIMEOUT){
+			return ECHO_ERROR;          // No echo within sonar range
+		}
+	};
+
+	TCCR0B = 0x00;                      // stop 16 bit timer with no prescaler
+	TIMSK0=0;
+	no_of_ticks = ((overFlowCounter*TIMER_MAX)+TCNT0);  // counter count
+	dist_in_cm = (no_of_ticks/(CONVERT_TO_CM*CYCLES_PER_US));   // distance in cm
+	return (dist_in_cm);
+}
+
+void meetafstand() {
+	uint16_t afstand = lees_afstandssensor();
+	if (afstand > 20) {
+		return;
+	}
+	afstand = (afstand * 10) / 15;
+
+	uint8_t proces = 0;
+
+	if (TEMPERATUUR > 16 || LICHT > 8) {
+		proces = 1; // Moet uitrollen
+	}
+	if (TEMPERATUUR < 12 || LICHT < 4) {
+		proces = 0; // Moet oprollen
+	}
+
+	if (proces == 1)
+	{
+		if (afstand > 8){
+			roodLampje();
+		}
+		else{
+			geelLampje();
+		}
+	}else{
+		if (afstand <= 2) {
+			groenLampje();
+		}
+		else {
+			geelLampje();
+		}
+
+
+	}
+
+	eeprom_update_word(&AFSTAND, afstand); // Ipv random, sensor uitlezen
+}
+
+
+/************************************************************************/
+/* Ledjes                                                               */
+/************************************************************************/
+
+void roodLampje(){
+	PORTD |= (1 << PD4);	// Rood aan
+	PORTD &= ~(1 << PD3);	// Geel uit
+	PORTD &= ~(1 << PD2);	// Groen uit
+}
+void groenLampje(){
+	PORTD |= (1 << PD2);	// Groen aan
+	PORTD &= ~(1 << PD3);	// Geel uit
+	PORTD &= ~(1 << PD4);	// Rood uit
+}
+void geelLampje(){
+	PORTD ^= (1 << PD3);	// Geel aan
+	PORTD &= ~(1 << PD4);	// Rood uit
+	PORTD &= ~(1 << PD2);	// Groen uit
+}
+
 
 
 
@@ -123,33 +246,40 @@ void meetLicht() {
 /* MAIN                                                                 */
 /************************************************************************/
 int main(void)
-{	
+{
+
+	DDRB=0;
+	DDRD=0xFF;
 	uart_init();
 	init_adc();
+
 	SCH_Init_T1();
+	init_afstandssensor();
+	//sei();
 	_delay_ms(1000);
-	
+
 	char command[200];		// buffer for command
 	char dataBuffer[10];	// buffer for data
 	char stringBuffer[200];	// buffer for sprintf
-	
+
 	// Clear EEPROM
 	/*for (uint8_t i = 0; i < 512; i++ ) {
 		eeprom_update_byte(i, 0);
 	}*/
-	
+
 	SCH_Add_Task(meetTemperatuur, 0, 4000);
 	SCH_Add_Task(meetLicht, 0, 3000);
+	SCH_Add_Task(meetafstand, 0, 100);
 	SCH_Start();
-	
-	
+
+
 	while (1) {
 		SCH_Dispatch_Tasks();
-		
+
 		ser_readln(command, 200);
 		uint8_t ok = 0;
-		
-		
+
+
 		/************************************************************************/
 		/* Connection:                                                          */
 		/************************************************************************/
@@ -157,13 +287,13 @@ int main(void)
 			ser_writeln("handshake");
 			ok = 1;
 		}
-		
+
 		if (!strcmp(command, "ping")) {
 			ser_writeln("pong");
 			ok = 1;
 		}
-		
-		
+
+
 		/************************************************************************/
 		/* Get:                                                                 */
 		/************************************************************************/
@@ -175,7 +305,7 @@ int main(void)
 			ser_writeln(stringBuffer);
 			ok = 1;
 		}
-		
+
 		if(!strcmp(command, "getSettingsTemp")) {
 			uint8_t uitrol = eeprom_read_byte(&UITROL_TEMPERATUUR);
 			uint8_t oprol = eeprom_read_byte(&OPROL_TEMPERATUUR);
@@ -191,7 +321,7 @@ int main(void)
 			ser_writeln(stringBuffer);
 			ok = 1;
 		}
-		
+
 		if(!strcmp(command, "getUitrolstand")) {
 			uint8_t min = eeprom_read_byte(&MIN_UITROLSTAND);
 			uint8_t max = eeprom_read_byte(&MAX_UITROLSTAND);
@@ -199,7 +329,7 @@ int main(void)
 			ser_writeln(stringBuffer);
 			ok = 1;
 		}
-		
+
 		// Data
 		if(!strcmp(command, "getSensorTemp")) {
 			uint8_t data = eeprom_read_byte(&TEMPERATUUR);
@@ -207,29 +337,29 @@ int main(void)
 			ser_writeln(stringBuffer);
 			ok = 1;
 		}
-		
+
 		if(!strcmp(command, "getSensorLicht")) {
 			uint8_t data = eeprom_read_byte(&LICHT);
 			sprintf(stringBuffer, "%i", data);
 			ser_writeln(stringBuffer);
 			ok = 1;
 		}
-		
+
 		if(!strcmp(command, "getAfstand")) {
-			uint8_t data = 14; // Uitlezen van UltrasonoorSensor
+			uint16_t data = eeprom_read_byte(&AFSTAND); // Uitlezen van UltrasonoorSensor
 			sprintf(stringBuffer, "%i", data);
 			ser_writeln(stringBuffer);
 			ok = 1;
 		}
-		
+
 		if(!strcmp(command, "getModus")) {
 			uint8_t data = eeprom_read_byte(&MODUS);
 			sprintf(stringBuffer, "%i", data);
 			ser_writeln(stringBuffer);
 			ok = 1;
 		}
-		
-		
+
+
 		/************************************************************************/
 		/* Set:                                                                 */
 		/************************************************************************/
@@ -237,37 +367,33 @@ int main(void)
 			uint8_t StringOfData[20];
 			ser_readln(StringOfData, 20);
 			eeprom_update_block((const void*)StringOfData , (void*)DEVICE_NAAM, 20);
-			//ser_writeln("Name is set"); bevat geen eerste response?
 			ok = 1;
 		}
-		
-		if (!strcmp(command, "setTemp")) {		// Moet nog aangepast worden, 2x uitlezen van data(min en max)
-			eeprom_update_byte(&OPROL_TEMPERATUUR, rand() % 20);
-			eeprom_update_byte(&UITROL_TEMPERATUUR, (rand() % 80) + 20);
-			//ser_readln(dataBuffer, 200);
-			//uint8_t data = (uint8_t)dataBuffer[0];
-			//sprintf(stringBuffer, "Saved: %i", data);
-			//ser_writeln("saved bro");
+
+		if (!strcmp(command, "setTemp")) {
+			uint8_t StringOfData[20];
+			ser_readln(StringOfData, 20);
+			eeprom_update_byte(&UITROL_TEMPERATUUR, StringOfData);
+			ser_readln(StringOfData, 20);
+			eeprom_update_byte(&OPROL_TEMPERATUUR, StringOfData);
 			ok = 1;
 		}
-		
-		if (!strcmp(command, "setLicht")) {		// Moet nog aangepast worden, 2x uitlezen van data(min en max)
-			eeprom_update_byte(&OPROL_LICHT, rand() % 20);
-			eeprom_update_byte(&UITROL_LICHT, (rand() % 80) + 20);
-			//ser_readln(dataBuffer, 200);
-			//uint8_t data = (uint8_t)dataBuffer[0];
-			//sprintf(stringBuffer, "Saved: %i", data);
-			//ser_writeln("saved bro");
+
+		if (!strcmp(command, "setLicht")) {
+			uint8_t StringOfData[20];
+			ser_readln(StringOfData, 20);
+			eeprom_update_byte(&UITROL_LICHT, StringOfData);
+			ser_readln(StringOfData, 20);
+			eeprom_update_byte(&OPROL_LICHT, StringOfData);
 			ok = 1;
 		}
-		
-		if (!strcmp(command, "setUitrolstand")) {		// Moet nog aangepast worden, 2x uitlezen van data(min en max)
-			eeprom_update_byte(&MIN_UITROLSTAND, rand() % 20);
-			eeprom_update_byte(&MAX_UITROLSTAND, (rand() % 80) + 20);
-			//ser_readln(dataBuffer, 200);
-			//uint8_t data = (uint8_t)dataBuffer[0];
-			//sprintf(stringBuffer, "Saved: %i", data);
-			//ser_writeln("saved bro");
+
+		if (!strcmp(command, "setUitrolstand")) {
+			uint8_t StringOfData[20];
+			ser_readln(StringOfData, 20);
+			eeprom_update_byte(&MIN_UITROLSTAND, StringOfData);
+			ser_readln(StringOfData, 20);
+			eeprom_update_byte(&MAX_UITROLSTAND, StringOfData);
 			ok = 1;
 		}
 		
