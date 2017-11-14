@@ -42,12 +42,60 @@ class Controller:
         print("Connection failed!")
         self.startUpdate()
 
-    def startSaveSettings(self, name):
-        print("Saving..")
+
+    '''--------------------
+    --------Settings-------
+    --------------------'''
+    def startSaveSettings(self, name, uitrolstand, setTemp, setLicht):
+        print("Saving..", (name, uitrolstand, setTemp, setLicht))
         self.t_update.cancel()
-        t_save = Timer(0.5, protocol.saveSettings, [self.finnishSaveSettings, name])
+        t_save = Timer(0.5, protocol.saveSettings, [self.finnishSaveSettings, name, uitrolstand, setTemp, setLicht])
         t_save.start()
 
     def finnishSaveSettings(self):
         print("Settings are saved! :)")
         self.startUpdate(0)
+
+
+    '''--------------------
+    --------Actions--------
+    --------------------'''
+    # Zet automatisch
+    def startSetAuto(self):
+        print("Saving..")
+        self.t_update.cancel()
+        t_save = Timer(0.5, protocol.setAuto, [self.finnishSetAuto,self.failedSetAuto])
+        t_save.start()
+
+    def finnishSetAuto(self):
+        print("Mode has changed")
+        self.startUpdate(0)
+
+    def failedSetAuto(self):
+        self.startUpdate()
+
+    # Oprollen
+    def startRolOp(self):
+        self.t_update.cancel()
+        t_save = Timer(0.5, protocol.rolOp, [self.finnishRolOp, self.failedRolOp])
+        t_save.start()
+
+    def finnishRolOp(self):
+        print("Het zonnescherm wordt op handmatig gezet en gaat oprollen.")
+        self.startUpdate(0)
+
+    def failedRolOp(self):
+        self.startUpdate()
+
+    # Uitrollen
+    def startRolUit(self):
+        self.t_update.cancel()
+        t_save = Timer(0.5, protocol.rolUit, [self.finnishRolUit, self.failedRolUit])
+        t_save.start()
+
+    def finnishRolUit(self):
+        print("Het zonnescherm wordt op handmatig gezet en gaat uitrollen.")
+        self.startUpdate(0)
+
+    def failedRolUit(self):
+        self.startUpdate()

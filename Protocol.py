@@ -23,10 +23,10 @@ class Protocol:
         self.selectConn = (com, self.comList.get(com))
         print(self.selectConn)
 
-    def connect(self, succes, fail, comport):
+    def connect(self, success, fail, comport):
         if comport in self.comList.keys():
             self.selectSer(comport)
-            succes()
+            success()
             return
 
         print("try connect to " + comport)
@@ -39,7 +39,7 @@ class Protocol:
         time.sleep(2)
         if self.handshake():
             self.comList[comport] = self.connection[1]
-            succes()
+            success()
         else:
             print("Handshake failed!")
             fail()
@@ -48,7 +48,7 @@ class Protocol:
     '''------------------------
     ---------Request-----------
     ------------------------'''
-    def request(self, command, data=None):
+    def request(self, command, data=None, data2=None):
         if self.connection[1] == None:
             #print("Serial port connection is None")
             return
@@ -58,7 +58,9 @@ class Protocol:
         try:
             self.connection[1].write((command + "\n").encode('ascii'))
             if data:
-                self.connection[1].write((data + "\n").encode('ascii'))
+                    self.connection[1].write((data + "\n").encode('ascii'))
+            if data2:
+                self.connection[1].write((data2 + "\n").encode('ascii'))
         except serial.SerialException:
             return
 
@@ -101,7 +103,7 @@ class Protocol:
             self.changeSer(com, self.comList.get(com))
             if self.ping():
                 naam = self.getNaam()
-                status = 0 # Dit is uitgerold, opgerold, of bezig (wordt berekent via afstand)
+                status = self.getStatus()
                 if self.selectConn[0] == com:
                     devices[com] = {
                         "selected": 1,
@@ -111,7 +113,6 @@ class Protocol:
                     data = {
                         "getSensorTemp": self.getSensorTemp(),
                         "getSensorLicht": self.getSensorLicht(),
-                        "getAfstand": self.getAfstand(),
                         "getModus": self.getModus()
                     }
                     instellingen = {
@@ -190,6 +191,13 @@ class Protocol:
         else:
             return None
 
+    def getStatus(self):
+        response = self.request("getStatus")
+        if response[0] == "OK":
+            return response[1]
+        else:
+            return "0"
+
     def getModus(self):
         response = self.request("getModus")
         if response[0] == "OK":
@@ -199,9 +207,12 @@ class Protocol:
 
 
     # Set:
-    def saveSettings(self, callback, name):
+    def saveSettings(self, callback, name, uitrolstand, setTemp, setLicht):
         self.connection = self.selectConn
         self.setNaam(name)
+        self.setUitrolstand(uitrolstand[0], uitrolstand[1])
+        self.setTemp(setTemp[0], setTemp[1])
+        self.setLicht(setLicht[0], setLicht[1])
         callback()
 
     def setNaam(self, name):
@@ -225,14 +236,23 @@ class Protocol:
 
 
     # Actie:
-    def rolOp(self):
+    def rolOp(self, success, failed):
         response = self.request("rolOp")
-        return (response[0] == "OK")
+        if (response[0] == "OK"):
+            success()
+        else:
+            failed()
 
-    def rolUit(self):
+    def rolUit(self, success, failed):
         response = self.request("rolUit")
-        return (response[0] == "OK")
+        if (response[0] == "OK"):
+            success()
+        else:
+            failed()
 
-    def setAuto(self):
+    def setAuto(self, success, failed):
         response = self.request("setAuto")
-        return (response[0] == "OK")
+        if (response[0] == "OK"):
+            success()
+        else:
+            failed()

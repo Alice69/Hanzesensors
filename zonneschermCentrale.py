@@ -16,10 +16,12 @@ class MainFrame(Tk):
         self.dataMenu = DataMenu(self, self)
 
         self.frames = {}
-        for F in (EmptyFrame, ZonneschermFrame, MetingenFrame, InstellingenFrame):
+        for F in (ZonneschermFrame, MetingenFrame, InstellingenFrame):
             self.frames[F] = F(self.dataMenu)
 
-        self.show_frame(EmptyFrame)
+        self.show_frame(ZonneschermFrame)
+        self.emptyFrame = EmptyFrame(self.dataMenu)
+        self.emptyFrame.tkraise()
 
     def getCenterGeometry(self, w, h):
         return (w, h, int(self.winfo_screenwidth() / 2) - int(w / 2), int(self.winfo_screenheight() / 2) - int(h / 2))
@@ -28,16 +30,33 @@ class MainFrame(Tk):
         self.frames[frame].tkraise()
 
     def updateGUI(self, devices, data, instellingen):
+        selectionReady = False
         for k, device in devices.items():
             if device['selected'] == 1:
-                self.dataMenu.tab1.config(state=NORMAL)
-                self.dataMenu.tab2.config(state=NORMAL)
-                self.dataMenu.tab3.config(state=NORMAL)
-                self.frames[InstellingenFrame].updateInstellingen(instellingen)
-            else:
-                self.dataMenu.tab1.config(state=DISABLED)
-                self.dataMenu.tab2.config(state=DISABLED)
-                self.dataMenu.tab3.config(state=DISABLED)
+                selectionReady = True
+
+        if selectionReady:
+            self.emptyFrame.hide()
+            self.dataMenu.tab1.config(state=NORMAL)
+            self.dataMenu.tab2.config(state=NORMAL)
+            self.dataMenu.tab3.config(state=NORMAL)
+            if device['status'] == "opgerold":
+                self.dataMenu.progressBar.config(bg='#5bff6c', text="Opgerold")
+            elif device['status'] == "uitgerold":
+                self.dataMenu.progressBar.config(bg='#ff6b5b', text="Uitgerold")
+            elif device['status'] == "oprollen":
+                self.dataMenu.progressBar.config(bg='#ffd966', text="Bezig met oprollen..")
+            elif device['status'] == "uitrollen":
+                self.dataMenu.progressBar.config(bg='#ffd966', text="Bezig met uitrollen..")
+
+            self.frames[InstellingenFrame].updateInstellingen(instellingen)
+            self.frames[ZonneschermFrame].updateFrame(data)
+        else:
+            self.emptyFrame.show()
+            self.dataMenu.tab1.config(state=DISABLED)
+            self.dataMenu.tab2.config(state=DISABLED)
+            self.dataMenu.tab3.config(state=DISABLED)
+            self.dataMenu.progressBar.config(bg='#cccccc', text="")
         self.sideMenu.updateMenu(devices)
 
 
@@ -46,8 +65,8 @@ class MainFrame(Tk):
         self.mainloop()
 
     def exit(self):
-        controller.stop()
         self.destroy()
+        controller.stop()
 
 
 class SideMenu(Canvas):
@@ -81,17 +100,15 @@ class SideMenu(Canvas):
         itemHeight = 60
         itemWidth = self.mylist.winfo_width()-(self.scrollbar.winfo_width()/2)
         dotSize = 16
-        statusColor = ('#ff6b5b', '#5bff6c')
+        statusColor = {'0':'#ff6b5b', '1':'#5bff6c'}
         selectColor = [('#FFF', '#000'), ('#2b78e4', '#FFF')]
 
         self.mylist.delete("all")
-        listBtns = []
         for i, item in enumerate(devices.items()):
             com, data = item[0], item[1]
             y = (i * itemHeight)
             self.mylist.create_rectangle(0,y, itemWidth, y + itemHeight, tags="btn-{}".format(i), fill=selectColor[data['selected']][0])
-            self.mylist.tag_bind("btn-{}".format(i), '<ButtonPress-1>', lambda event: controller.startConnection(com))
-            #self.mylist.tag_bind(listBtns[i], '<ButtonPress-1>', lambda event: controller.select(i))
+            self.mylist.tag_bind("btn-{}".format(i), '<ButtonPress-1>', lambda event, idx=i, com=com: controller.startConnection(com))
             self.mylist.create_oval(10, y+(itemHeight/2)-(dotSize/2), 10+dotSize, y+(itemHeight/2)+(dotSize/2), fill=statusColor[data['status']])
             self.mylist.create_text(itemWidth/2, (i * itemHeight) + (itemHeight/2), text=data['naam'], fill=selectColor[data['selected']][1], font=("Helvetica", 10, "bold"))
         self.scrollbar.config(command=self.mylist.yview)
@@ -116,22 +133,15 @@ class DataMenu(Frame):
         self.tabFont = ("Helvetica", 12, "bold")
 
         # tabs op frame
-        self.tab1= Button(self, text="Zonnescherm", bd=1, relief='solid', bg=self.tabColor, font=self.tabFont, state=DISABLED, command=self.changeTabZonnescherm)
+        self.tab1= Button(self, text="Zonnescherm", bd=1, relief='solid', bg=self.tabSelectColor, fg='#fff', font=self.tabFont, state=DISABLED, command=self.changeTabZonnescherm)
         self.tab1.grid(column=0, row=0, sticky=NSEW)
         self.tab2 = Button(self, text="Metingen", bd=1, relief='solid', bg=self.tabColor, font=self.tabFont, state=DISABLED, command=self.changeTabMetingen)
         self.tab2.grid(column=1, row=0, sticky=NSEW)
         self.tab3 = Button(self, text="Instellingen", bd=1, relief='solid', bg=self.tabColor, font=self.tabFont, state=DISABLED, command=self.changeTabInstellingen)
         self.tab3.grid(column=2, row=0, sticky=NSEW)
 
-        #self.progressBar = Label(self, bg='#5bff6c', bd=1, relief='solid')
-        s = ttk.Style()
-        progress = IntVar()
-        self.progressBar = ttk.Progressbar(self, variable=progress)
-        s.configure(self.progressBar, background='#000', foreground='2b78e4')
+        self.progressBar = Label(self, bg='#cccccc', font=("Helvetica", 10, "bold"), border=0)
         self.progressBar.grid(columnspan=3, row=2, sticky=NSEW)
-        #self.progressLabel = Label(self, text="Opgerold")
-        #self.progressLabel.grid(columnspan=3, row=2, sticky=NSEW)
-        progress.set(10)
 
     def changeTabZonnescherm(self):
         self.controller.show_frame(ZonneschermFrame)
@@ -152,20 +162,31 @@ class DataMenu(Frame):
         self.tab3.config(bg=self.tabSelectColor, fg='#FFF')
 
 
+
+class EmptyFrame(Frame):
+    def __init__(self, master):
+        Frame.__init__(self, master)
+        self.config(bg='#EEE')
+        self.show()
+
+    def show(self):
+        self.grid(columnspan=3, row=1, sticky=NSEW)
+        self.tkraise()
+
+    def hide(self):
+        self.grid_forget()
+
 class DataFrame(Frame):
     def __init__(self, master):
         Frame.__init__(self, master)
         self.config(bg='#FFF')
         self.grid(columnspan=3, row=1, padx=16, pady=16, sticky=NSEW)
 
-class EmptyFrame(DataFrame):
-    def __init__(self, master):
-        DataFrame.__init__(self, master)
-
 
 class ZonneschermFrame(DataFrame):
     def __init__(self, master):
         DataFrame.__init__(self, master)
+        self.handmatig = False
 
         for i in range(12):
             self.columnconfigure(i, weight=1)
@@ -176,19 +197,38 @@ class ZonneschermFrame(DataFrame):
         self.modusLabel = Label(self, text="Modus: ", font=("Helvetica", 8, "bold"))
         self.modusLabel.grid(column=9, row=0, sticky=NSEW)
 
-        self.btnMode_1 = Button(self, text = "Automatisch", bg = '#cccccc', bd=2, relief='solid', font=("Helvetica", 6, "bold"))
+        self.btnMode_1 = Button(self, text = "Automatisch", bd=2, relief='solid', font=("Helvetica", 6, "bold"), command=self.setAuto)
         self.btnMode_1.grid(column=10, row=0, sticky = NSEW)
-        self.btnMode_2 = Button(self, text = "Handmatig", bg = '#674ea7', fg='#FFF', bd=2, relief='solid', font=("Helvetica", 6, "bold"))
+        self.btnMode_2 = Button(self, text = "Handmatig", bd=2, relief='solid', font=("Helvetica", 6, "bold"), command=self.setHandmatig)
         self.btnMode_2.grid(column=11, row=0, sticky = NSEW)
 
-        self.button = Button(self, text = "Oprollen", bg = '#5bff6c', bd=2, relief='solid', font=("Helvetica", 10, "bold"))
-        self.button.grid(column=2, columnspan=4, row=5, rowspan=2, sticky = NSEW)
-        self.button1 = Button(self, text = "Uitrollen", bg = '#ff6b5b', bd=2, relief='solid', font=("Helvetica", 10, "bold"))
-        self.button1.grid(column=8, columnspan=3, row=5, rowspan=2, sticky=NSEW)
+        self.button = Button(self, text = "Oprollen", bg = '#5bff6c', bd=2, relief='solid', font=("Helvetica", 10, "bold"), command=controller.startRolOp)
+        self.button1 = Button(self, text = "Uitrollen", bg = '#ff6b5b', bd=2, relief='solid', font=("Helvetica", 10, "bold"), command=controller.startRolUit)
+
+    def updateFrame(self, data):
+        if data and self.handmatig == False:
+            modus = int(data['getModus'])
+        else:
+            modus = 1
+        if modus == 0:
+            self.btnMode_1.config(bg='#674ea7', fg='#FFF')
+            self.btnMode_2.config(bg='#cccccc', fg='#000')
+            self.button.grid_forget()
+            self.button1.grid_forget()
+        if modus == 1:
+            self.btnMode_1.config(bg='#cccccc', fg='#000')
+            self.btnMode_2.config(bg='#674ea7', fg='#FFF')
+            self.button.grid(column=2, columnspan=4, row=5, rowspan=2, sticky=NSEW)
+            self.button1.grid(column=8, columnspan=3, row=5, rowspan=2, sticky=NSEW)
+
+    def setHandmatig(self):
+        self.handmatig = True
+        self.updateFrame(None)
 
     def setAuto(self):
-        pass
-        #self.button.re
+        self.handmatig = False
+        controller.startSetAuto()
+
 
 class MetingenFrame(DataFrame):
     def __init__(self, master):
@@ -255,8 +295,16 @@ class InstellingenFrame(DataFrame):
         self.spinbox4 = Spinbox(self, from_= 1, to=10, justify=CENTER, width=5,font=8)
         self.spinbox4.grid(column=2, row=10,sticky=W)
 
-        self.button_opslaan = Button(self,text="Opslaan",font=8, command=lambda: controller.startSaveSettings(self.entry1.get()))
+        self.button_opslaan = Button(self,text="Opslaan",font=8, command=self.save)
         self.button_opslaan.grid(columnspan=3,row=11)
+
+    def save(self):
+        controller.startSaveSettings(
+            self.entry1.get(),
+            (self.scale1.get(), self.scale2.get()),
+            (self.spinbox1.get(), self.spinbox3.get()),
+            (self.spinbox2.get(), self.spinbox4.get())
+        )
 
     def updateInstellingen(self, instellingen):
         if instellingen != {}:
