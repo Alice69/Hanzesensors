@@ -324,6 +324,7 @@ class InstellingenFrame(DataFrame):
             self.spinbox4.delete(0, "end")
             self.spinbox4.insert(0, instellingen["getSettingsLicht"][1])
 
+
 controller = Controller()
 mainFrame = MainFrame(1024, 600)
 controller.myInit(mainFrame)
