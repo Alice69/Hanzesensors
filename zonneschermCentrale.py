@@ -29,28 +29,23 @@ class MainFrame(Tk):
     def show_frame(self, frame):
         self.frames[frame].tkraise()
 
-    def updateGUI(self, devices, data, instellingen):
-        selectionReady = False
-        for k, device in devices.items():
-            if device['selected'] == 1:
-                selectionReady = True
-
-        if selectionReady:
+    def updateGUI(self, devices, selectedDevice):
+        if selectedDevice:
             self.emptyFrame.hide()
             self.dataMenu.tab1.config(state=NORMAL)
             self.dataMenu.tab2.config(state=NORMAL)
             self.dataMenu.tab3.config(state=NORMAL)
-            if device['status'] == "opgerold":
+            '''if device['status'] == "opgerold":
                 self.dataMenu.progressBar.config(bg='#5bff6c', text="Opgerold")
             elif device['status'] == "uitgerold":
                 self.dataMenu.progressBar.config(bg='#ff6b5b', text="Uitgerold")
             elif device['status'] == "oprollen":
                 self.dataMenu.progressBar.config(bg='#ffd966', text="Bezig met oprollen..")
             elif device['status'] == "uitrollen":
-                self.dataMenu.progressBar.config(bg='#ffd966', text="Bezig met uitrollen..")
+                self.dataMenu.progressBar.config(bg='#ffd966', text="Bezig met uitrollen..")'''
 
-            self.frames[InstellingenFrame].updateInstellingen(instellingen)
-            self.frames[ZonneschermFrame].updateFrame(data)
+            self.frames[InstellingenFrame].updateInstellingen(selectedDevice['naam'], selectedDevice['getUitrolstand'], selectedDevice['getSettingsTemp'], selectedDevice['getSettingsLicht'])
+            self.frames[ZonneschermFrame].updateFrame(selectedDevice['getModus'])
         else:
             self.emptyFrame.show()
             self.dataMenu.tab1.config(state=DISABLED)
@@ -107,10 +102,10 @@ class SideMenu(Canvas):
         for i, item in enumerate(devices.items()):
             com, data = item[0], item[1]
             y = (i * itemHeight)
-            self.mylist.create_rectangle(0,y, itemWidth, y + itemHeight, tags="btn-{}".format(i), fill=selectColor[data['selected']][0])
+            self.mylist.create_rectangle(0,y, itemWidth, y + itemHeight, tags="btn-{}".format(i), fill=selectColor[0][0])
             self.mylist.tag_bind("btn-{}".format(i), '<ButtonPress-1>', lambda event, idx=i, com=com: controller.startConnection(com))
             self.mylist.create_oval(10, y+(itemHeight/2)-(dotSize/2), 10+dotSize, y+(itemHeight/2)+(dotSize/2), fill=statusColor[data['status']])
-            self.mylist.create_text(itemWidth/2, (i * itemHeight) + (itemHeight/2), text=data['naam'], fill=selectColor[data['selected']][1], font=("Helvetica", 10, "bold"))
+            self.mylist.create_text(itemWidth/2, (i * itemHeight) + (itemHeight/2), text=data['naam'], fill=selectColor[0][1], font=("Helvetica", 10, "bold"))
         self.scrollbar.config(command=self.mylist.yview)
         self.mylist.config(yscrollcommand=self.scrollbar.set, scrollregion=(0,0,0,len(devices)*itemHeight))
 
@@ -205,9 +200,9 @@ class ZonneschermFrame(DataFrame):
         self.button = Button(self, text = "Oprollen", bg = '#5bff6c', bd=2, relief='solid', font=("Helvetica", 10, "bold"), command=controller.startRolOp)
         self.button1 = Button(self, text = "Uitrollen", bg = '#ff6b5b', bd=2, relief='solid', font=("Helvetica", 10, "bold"), command=controller.startRolUit)
 
-    def updateFrame(self, data):
-        if data and self.handmatig == False:
-            modus = int(data['getModus'])
+    def updateFrame(self, getModus):
+        if getModus and self.handmatig == False:
+            modus = int(getModus)
         else:
             modus = 1
         if modus == 0:
@@ -306,23 +301,22 @@ class InstellingenFrame(DataFrame):
             (self.spinbox2.get(), self.spinbox4.get())
         )
 
-    def updateInstellingen(self, instellingen):
-        if instellingen != {}:
-            self.entry1.delete(0, "end")
-            self.entry1.insert(0, instellingen['naam'])
+    def updateInstellingen(self, naam, getUitrolstand, getSettingsTemp, getSettingsLicht):
+        self.entry1.delete(0, "end")
+        self.entry1.insert(0, naam)
 
-            self.scale1.set(instellingen["getUitrolstand"][0])
-            self.scale2.set(instellingen["getUitrolstand"][1])
+        self.scale1.set(getUitrolstand[0])
+        self.scale2.set(getUitrolstand[1])
 
-            self.spinbox1.delete(0, "end")
-            self.spinbox1.insert(0, instellingen["getSettingsTemp"][0])
-            self.spinbox3.delete(0, "end")
-            self.spinbox3.insert(0, instellingen["getSettingsTemp"][1])
+        self.spinbox1.delete(0, "end")
+        self.spinbox1.insert(0, getSettingsTemp[0])
+        self.spinbox3.delete(0, "end")
+        self.spinbox3.insert(0, getSettingsTemp[1])
 
-            self.spinbox2.delete(0, "end")
-            self.spinbox2.insert(0, instellingen["getSettingsLicht"][0])
-            self.spinbox4.delete(0, "end")
-            self.spinbox4.insert(0, instellingen["getSettingsLicht"][1])
+        self.spinbox2.delete(0, "end")
+        self.spinbox2.insert(0, getSettingsLicht[0])
+        self.spinbox4.delete(0, "end")
+        self.spinbox4.insert(0, getSettingsLicht[1])
 
 
 controller = Controller()
