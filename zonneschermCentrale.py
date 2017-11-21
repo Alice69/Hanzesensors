@@ -44,15 +44,15 @@ class MainFrame(Tk):
             elif device['status'] == "uitrollen":
                 self.dataMenu.progressBar.config(bg='#ffd966', text="Bezig met uitrollen..")'''
 
-            self.frames[InstellingenFrame].updateInstellingen(selectedDevice['naam'], selectedDevice['getUitrolstand'], selectedDevice['getSettingsTemp'], selectedDevice['getSettingsLicht'])
-            self.frames[ZonneschermFrame].updateFrame(selectedDevice['getModus'])
+            self.frames[InstellingenFrame].updateInstellingen(devices[selectedDevice])
+            #self.frames[ZonneschermFrame].updateFrame(devices[selectedDevice]['getModus'])
         else:
             self.emptyFrame.show()
             self.dataMenu.tab1.config(state=DISABLED)
             self.dataMenu.tab2.config(state=DISABLED)
             self.dataMenu.tab3.config(state=DISABLED)
             self.dataMenu.progressBar.config(bg='#cccccc', text="")
-        self.sideMenu.updateMenu(devices)
+        self.sideMenu.updateMenu(devices, selectedDevice)
 
 
     def start_mainloop(self):
@@ -91,21 +91,23 @@ class SideMenu(Canvas):
         self.button = Button(self, text="Connect", command=lambda: controller.startConnection(comInput.get()))
         self.button.grid(columnspan=2, column=1, row=2, sticky=NSEW)
 
-    def updateMenu(self, devices):
+    def updateMenu(self, devices, selectedDevice):
         itemHeight = 60
         itemWidth = self.mylist.winfo_width()-(self.scrollbar.winfo_width()/2)
         dotSize = 16
         statusColor = {'0':'#ff6b5b', '1':'#5bff6c'}
-        selectColor = [('#FFF', '#000'), ('#2b78e4', '#FFF')]
 
         self.mylist.delete("all")
         for i, item in enumerate(devices.items()):
             com, data = item[0], item[1]
+            color = ('#FFF', '#000')
+            if com == selectedDevice:
+                color = ('#2b78e4', '#FFF')
             y = (i * itemHeight)
-            self.mylist.create_rectangle(0,y, itemWidth, y + itemHeight, tags="btn-{}".format(i), fill=selectColor[0][0])
+            self.mylist.create_rectangle(0,y, itemWidth, y + itemHeight, tags="btn-{}".format(i), fill=color[0])
             self.mylist.tag_bind("btn-{}".format(i), '<ButtonPress-1>', lambda event, idx=i, com=com: controller.startConnection(com))
             self.mylist.create_oval(10, y+(itemHeight/2)-(dotSize/2), 10+dotSize, y+(itemHeight/2)+(dotSize/2), fill=statusColor[data['status']])
-            self.mylist.create_text(itemWidth/2, (i * itemHeight) + (itemHeight/2), text=data['naam'], fill=selectColor[0][1], font=("Helvetica", 10, "bold"))
+            self.mylist.create_text(itemWidth/2, (i * itemHeight) + (itemHeight/2), text=data['naam'], fill=color[1], font=("Helvetica", 10, "bold"))
         self.scrollbar.config(command=self.mylist.yview)
         self.mylist.config(yscrollcommand=self.scrollbar.set, scrollregion=(0,0,0,len(devices)*itemHeight))
 
@@ -301,22 +303,22 @@ class InstellingenFrame(DataFrame):
             (self.spinbox2.get(), self.spinbox4.get())
         )
 
-    def updateInstellingen(self, naam, getUitrolstand, getSettingsTemp, getSettingsLicht):
+    def updateInstellingen(self, selectdevice):
         self.entry1.delete(0, "end")
-        self.entry1.insert(0, naam)
+        self.entry1.insert(0, selectdevice['naam'])
 
-        self.scale1.set(getUitrolstand[0])
-        self.scale2.set(getUitrolstand[1])
+        #self.scale1.set(selectdevice['getUitrolstand'][0])
+        #self.scale2.set(selectdevice['getUitrolstand'][1])
 
-        self.spinbox1.delete(0, "end")
-        self.spinbox1.insert(0, getSettingsTemp[0])
-        self.spinbox3.delete(0, "end")
-        self.spinbox3.insert(0, getSettingsTemp[1])
+        '''self.spinbox1.delete(0, "end")
+self.spinbox1.insert(0, selectdevice['getSettingsTemp'][0])
+self.spinbox3.delete(0, "end")
+self.spinbox3.insert(0, selectdevice['getSettingsTemp'][1])
 
-        self.spinbox2.delete(0, "end")
-        self.spinbox2.insert(0, getSettingsLicht[0])
-        self.spinbox4.delete(0, "end")
-        self.spinbox4.insert(0, getSettingsLicht[1])
+self.spinbox2.delete(0, "end")
+self.spinbox2.insert(0, selectdevice['getSettingsLicht'][0])
+self.spinbox4.delete(0, "end")
+self.spinbox4.insert(0, selectdevice['getSettingsLicht'][1])'''
 
 
 controller = Controller()

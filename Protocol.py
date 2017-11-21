@@ -9,8 +9,8 @@ class Protocol:
     def __init__(self):
         self.comList = {}
 
-        self.connection = ("", None)#Connection("", None)
-        self.selectConn = ("", None)#Connection("COM4", None)
+        self.connection = ("", None)
+        self.selectConn = ("", None)
 
 
     '''------------------------
@@ -52,24 +52,24 @@ class Protocol:
         if self.connection[1] == None:
             #print("Serial port connection is None")
             return
-
         # print("command: {} to {}".format(command, self.connection[0]))
 
         try:
             self.connection[1].write((command + "\n").encode('ascii'))
             if data:
-                    self.connection[1].write((data + "\n").encode('ascii'))
+                    self.connection[1].write((str(data) + "\n").encode('ascii'))
             if data2:
-                self.connection[1].write((data2 + "\n").encode('ascii'))
+                self.connection[1].write((str(data2) + "\n").encode('ascii'))
         except serial.SerialException:
             return
 
         test = None
         info = None
-        try:
-            test = self.connection[1].readline().decode('ascii').strip()
-        except:
-            print("Can't read response from" + command)
+        while(test == None):
+            try:
+                test = self.connection[1].readline().decode('ascii').strip()
+            except:
+                print("Can't read response from" + command)
 
         if test not in ["OK", "ERR"]:
             info = test
@@ -97,39 +97,30 @@ class Protocol:
 
     def update(self, callback):
         devices = {}
-        instellingen = {}
-        data = {}
+        selectedDevice = None
         for com in list(self.comList.keys()):
             self.changeSer(com, self.comList.get(com))
             if self.ping():
                 naam = self.getNaam()
-                status = self.getStatus()
-                if self.selectConn[0] == com:
+                if com == self.selectConn[0]:
+                    selectedDevice = com
                     devices[com] = {
-                        "selected": 1,
                         "naam": naam,
-                        "status": status
-                    }
-                    data = {
+                        "status": self.getStatus(),
                         "getSensorTemp": self.getSensorTemp(),
                         "getSensorLicht": self.getSensorLicht(),
-                        "getModus": self.getModus()
-                    }
-                    instellingen = {
-                        "naam": naam,
+                        "getModus": self.getModus(),
                         "getSettingsTemp": self.getSettingsTemp(),
-                        "getSettingsLicht": self.getSettingsLicht(),
-                        "getUitrolstand": self.getUitrolstand()
+                        "getSettingsLicht": self.getSettingsLicht()
                     }
                 else:
                     devices[com] = {
-                        "selected": 0,
                         "naam": naam,
-                        "status": status
+                        "status": self.getStatus()
                     }
             else:
                 self.comList.pop(com)
-        callback(devices, data, instellingen)
+        callback(devices, selectedDevice)
 
     def ping(self):
         return (self.request("ping") == ("OK", "pong"))
@@ -203,14 +194,14 @@ class Protocol:
         if response[0] == "OK":
             return response[1]
         else:
-            return None
+            return "1"
 
 
     # Set:
     def saveSettings(self, callback, name, uitrolstand, setTemp, setLicht):
         self.connection = self.selectConn
         self.setNaam(name)
-        self.setUitrolstand(uitrolstand[0], uitrolstand[1])
+        #self.setUitrolstand(uitrolstand[0], uitrolstand[1])
         self.setTemp(setTemp[0], setTemp[1])
         self.setLicht(setLicht[0], setLicht[1])
         callback()
@@ -221,17 +212,17 @@ class Protocol:
 
     def setTemp(self, min, max):
         # Dubbele data verzenden
-        response = self.request("setTemp")
+        response = self.request("setTemp", min)
         return (response[0] == "OK")
 
     def setLicht(self, min, max):
         # Dubbele data verzenden
-        response = self.request("setLicht")
+        response = self.request("setLicht", min)
         return (response[0] == "OK")
 
     def setUitrolstand(self, min, max):
         # Dubbele data verzenden
-        response = self.request("setUitrolstand")
+        response = self.request("setUitrolstand", min, max)
         return (response[0] == "OK")
 
 

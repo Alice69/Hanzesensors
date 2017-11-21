@@ -20,9 +20,9 @@ class Controller:
         self.t_update = Timer(timer, protocol.update, [self.finnishUpdate])
         self.t_update.start()
 
-    def finnishUpdate(self, devices, data, instellingen):
-        #print("update", devices)
-        self.mainFrame.updateGUI(devices, data, instellingen)
+    def finnishUpdate(self, devices, selectedDevice):
+        print(devices, selectedDevice)
+        self.mainFrame.updateGUI(devices, selectedDevice)
         if self.running:
             self.startUpdate()
 
